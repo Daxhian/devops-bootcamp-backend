@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
+import type { JWTPayload } from "jose";
 import * as jose from "jose";
 
 const secret = new TextEncoder().encode(
   process.env.JWT_SECRET || "dev-link-secret-change-in-production"
 );
 
-export interface JwtPayload {
+export interface JwtPayload extends JWTPayload {
   id: string;
   email: string;
 }
@@ -29,4 +30,3 @@ export class JwtService {
     }
   }
 }
-
