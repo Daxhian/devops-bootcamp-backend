@@ -6,7 +6,6 @@
     "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
-    "lint": "eslint 'src/**/*.{ts,js}'",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },

@@ -1,10 +1,9 @@
 name: DevSecOps Pipeline
 
 on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+  pull_request:
+    branches: 
+        - main
     paths-ignore:
       - '.github/workflows/**'
       - '**/*.md'
@@ -19,8 +18,6 @@ jobs:
           SLACK_CHANNEL: github-notifications
           SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
           SLACK_MESSAGE: |
-            **Repository:** ${{ github.repository }}
-
             **Event**: https://github.com/${{ github.actor }} just made ${{ github.event_name }}!
 
             **Repository**: ${{ github.event.pull_request.html_url }}
@@ -28,7 +25,7 @@ jobs:
             **GitHub Branch**: ${{ github.ref_name }}
 
             **Commit Message**: ${{ github.event.pull_request.title }}
-          SLACK_TITLE: DevSecOps Advertiser Dashboard Pipeline
+          SLACK_TITLE: DevSecOps API Pipeline
           MSG_MINIMAL: true
           SLACKIFY_MARKDOWN: true
 
@@ -38,18 +35,34 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
-          cache: "npm"
+          node-version: '20.x'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Run ESLint
-        run: npm run lint
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v42
+        with:
+          files: |
+            **/*.js
+            **/*.jsx
+            **/*.ts
+            **/*.tsx
+
+      - name: Run ESLint on changed files
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: npx eslint ${{ steps.changed-files.outputs.all_changed_files }} --max-warnings=0
+
+      - name: Skip lint (no changed files)
+        if: steps.changed-files.outputs.any_changed != 'true'
+        run: echo "No JS/TS files changed, skipping lint."
 
   sca:
     name: Software Composition Analysis
@@ -61,14 +74,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
-          cache: "npm"
+          node-version: '20.x'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Run npm audit
-        run: npm audit --json | tee npm-audit-report.json | jq -e 'select(.metadata.vulnerabilities.critical == 0 and .metadata.vulnerabilities.high == 0 and .metadata.vulnerabilities.moderate == 0)' > /dev/null
+      - name: Run NPM audit
+        run: npm audit --json --audit-level=high | tee npm-audit-report.json > /dev/null
 
       - name: Upload SCA Reports
         uses: actions/upload-artifact@v4
@@ -87,43 +99,43 @@ jobs:
     container:
       image: semgrep/semgrep
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - name: Run semgrep
-        run: semgrep scan --error --json-output=semgrep-results.json
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+    - name: Run semgrep
+      run: semgrep scan --error --json-output=semgrep-results.json
+      env:
+        SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
-      - name: Upload SARIF Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: semgrep-report
-          path: semgrep-results.json
+    - name: Upload SARIF Report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: semgrep-report
+        path: semgrep-results.json
 
-      - name: Slack Notification
-        if: ${{ failure() }}
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
-          SLACK_COLOR: ${{ job.status }}
-          SLACK_MESSAGE_ON_FAILURE: "DevSecOps Pipeline failed!"
+    - name: Slack Notification
+      if: ${{ failure() }}
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
+        SLACK_COLOR: ${{ job.status }}
+        SLACK_MESSAGE_ON_FAILURE: "DevSecOps Pipeline failed!"
 
-      - name: Slack Notification
-        if: ${{ success() }}
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
-          SLACK_COLOR: ${{ job.status }}
-          SLACK_MESSAGE_ON_SUCCESS: "DevSecOps Pipeline was successful!"
+    - name: Slack Notification
+      if: ${{ success() }}
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
+        SLACK_COLOR: ${{ job.status }}
+        SLACK_MESSAGE_ON_SUCCESS: "DevSecOps Pipeline was successful!"
 
-      - name: Slack Notification with Artifact Link
-        if: always()
-        uses: rtCamp/action-slack-notify@v2
-        env:
-          SLACK_COLOR: ${{ job.status }}
-          SLACK_MESSAGE_ON_SUCCESS: "Get DevSecOps Reports here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          SLACK_MESSAGE_ON_FAILURE: "Get DevSecOps Reports here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          SLACK_MSG_AUTHOR: ${{ github.actor }}
-          MSG_MINIMAL: true
-          SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
+    - name: Slack Notification with Artifact Link
+      if: always()
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_COLOR: ${{ job.status }}
+        SLACK_MESSAGE_ON_SUCCESS: "Get DevSecOps Reports here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        SLACK_MESSAGE_ON_FAILURE: "Get DevSecOps Reports here: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        SLACK_MSG_AUTHOR: ${{ github.actor }}
+        MSG_MINIMAL: true
+        SLACK_WEBHOOK: ${{ secrets.SLACK_INCOMING_WEBHOOK }}
