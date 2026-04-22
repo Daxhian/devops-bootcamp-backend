@@ -21,6 +21,9 @@ RUN --mount=type=cache,target=/root/.npm \
     npm cache clean --force
 
 COPY . .
+# generate client first
+RUN npx prisma generate  
+
 RUN npm run build
 RUN npm prune --production
 
